@@ -1,14 +1,18 @@
 [
-  {
-    "name": "week",
-    "title": "This week",
-    "subtitle": "Underwriting Agency for Claude Code: what needs attention, rendered by npm run view",
-    "sections": [
-      {
-        "title": "Needs attention",
-        "note": "TODO(author): point this at the industry's attention view (overdue, stuck, quiet).",
-        "sql": "select 'replace me' as item, 'TODO(author)' as why"
-      }
-    ]
-  }
+  { "name": "week", "title": "The agency week", "sections": [
+      { "title": "In five numbers", "sql": "select item, value from this_week" },
+      { "title": "Needs a person", "note": "Law first, then the binder, then the book.", "sql": "select level, what, record, issue, source from attention order by case level when 'breached' then 0 when 'overdue' then 1 when 'due soon' then 2 when 'stale' then 3 else 4 end, what" }
+  ] },
+  { "name": "binders", "title": "Binders and insurers", "sections": [
+      { "title": "Premium cap used", "sql": "select reference, insurer, currency, ends_on, days_left, gwp_cap_cents, gwp_cents, percent_used, projected_gwp_cents from binder_usage order by percent_used desc nulls last" },
+      { "title": "Bordereaux not sent", "sql": "select binder, to_char(month, 'YYYY-MM') as month, due_on, lines, currency, gross_cents from bordereaux_due where submitted_on is null order by due_on" },
+      { "title": "Premium owed to insurers", "sql": "select binder, insurer, to_char(month, 'YYYY-MM') as month, due_on, currency, unremitted_cents from remittance_due where unremitted_cents <> 0 order by due_on" }
+  ] },
+  { "name": "renewals", "title": "Renewals, next 60 days", "sections": [
+      { "title": "Expiring with nothing bound", "note": "Australian renewable policies need the expiry notice 14 days out.", "sql": "select number, insured, broker, product, expiry, days_left, currency, annual_premium_cents, renewal_quote, s58_applies, expiry_notice_on, claims from renewals_due order by expiry" }
+  ] },
+  { "name": "claims", "title": "Claims", "sections": [
+      { "title": "Open claims", "sql": "select number, policy, insured, country, notified_on, days_open, currency, reserve_cents, paid_cents, decision, handler from open_claims order by days_open desc" },
+      { "title": "Loss ratio by binder", "sql": "select binder, insurer, currency, written_cents, incurred_cents, claims, loss_ratio_percent from loss_ratio" }
+  ] }
 ]

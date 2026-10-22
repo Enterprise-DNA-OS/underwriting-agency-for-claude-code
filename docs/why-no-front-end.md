@@ -7,7 +7,7 @@ That layer used to be the whole product, because talking to a database was hard.
 ## What you gain
 
 - **Better answers.** A dashboard shows what the vendor decided to chart. Here you ask your own question, in your own words, and get it answered against your own data.
-- **No seats.** Everyone who needs to look can look. The bill does not grow with headcount.
+- **No charge on the premium you write.** Insly's own pricing page says its MGA pricing flexes with the volumes transacted through the platform. Here the cost of the system does not move when the book grows.
 - **Your data in your Postgres.** Plain tables. Back them up, query them from anything, leave any time. There is no export step because there is nothing to leave.
 - **A process that matches you.** When your way of working changes, you add a command. You do not wait for a feature request to clear.
 
@@ -15,6 +15,8 @@ That layer used to be the whole product, because talking to a database was hard.
 
 - **A visual board.** Stages are a table you ask about, not cards you drag.
 - **A phone app.** It runs where Claude Code runs.
+- **A broker portal.** Brokers cannot log in and quote themselves. They email the agency, as most still do, and the underwriter quotes from here in a minute. A portal is something Enterprise DNA builds into a customised version when the agency wants one.
+- **Rating screens for complex products.** Rates here are a per mille rate and a minimum per product. Loadings, rating tables by occupation or postcode, and underwriting questions are added with `/customise`.
 - **A vendor help desk.** This is open source. Enterprise DNA supports the installed version for businesses that want someone to call.
 
 ## Who this fits

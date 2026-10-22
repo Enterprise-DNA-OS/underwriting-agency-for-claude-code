@@ -1,11 +1,111 @@
 [
   {
-    "name": "example",
-    "title": "TODO(author): the first document this industry must produce",
-    "for_each": "select gen_random_uuid() as id, 'Example' as name",
+    "name": "risk-bordereau",
+    "title": "Risk and premium bordereau",
+    "for_each": "select d.binder_id::text || '_' || to_char(d.month, 'YYYYMMDD') as id, d.binder || ' ' || to_char(d.month, 'YYYY-MM') as name from bordereaux_due d where d.month >= date_trunc('month', current_date) - interval '3 months' order by d.month, d.binder",
     "file": "name",
     "sections": [
-      { "title": "Details", "sql": "select 'replace me' as item, $1::text as record_id" }
+      {
+        "title": "Binder and period",
+        "sql": "select d.binder, d.insurer, to_char(d.month, 'Month YYYY') as reporting_month, d.due_on, coalesce(d.submitted_on::text, 'not yet sent') as sent, d.currency from bordereaux_due d where d.binder_id::text = split_part($1, '_', 1) and d.month = to_date(split_part($1, '_', 2), 'YYYYMMDD')"
+      },
+      {
+        "title": "Risks written and changed",
+        "sql": "select policy, insured, region, class, kind, effective_on, inception, expiry, sum_insured_cents, currency, gross_cents, tax_cents, agency_commission_cents, net_due_cents from bordereau_lines where binder_id::text = split_part($1, '_', 1) and month = to_date(split_part($1, '_', 2), 'YYYYMMDD') order by effective_on, policy"
+      },
+      {
+        "title": "Totals",
+        "note": "Net due to the insurer is gross premium plus tax, less the agency's commission.",
+        "sql": "select count(*) as lines, max(currency) as currency, coalesce(sum(gross_cents), 0)::bigint as gross_cents, coalesce(sum(tax_cents), 0)::bigint as tax_cents, coalesce(sum(agency_commission_cents), 0)::bigint as agency_commission_cents, coalesce(sum(net_due_cents), 0)::bigint as net_due_cents from bordereau_lines where binder_id::text = split_part($1, '_', 1) and month = to_date(split_part($1, '_', 2), 'YYYYMMDD')"
+      }
+    ]
+  },
+  {
+    "name": "remittance-advice",
+    "title": "Premium remittance advice",
+    "for_each": "select r.binder_id::text || '_' || to_char(r.month, 'YYYYMMDD') as id, r.binder || ' ' || to_char(r.month, 'YYYY-MM') as name from remittance_due r where r.unremitted_cents <> 0 order by r.due_on",
+    "file": "name",
+    "sections": [
+      {
+        "title": "To the insurer",
+        "sql": "select insurer, binder, to_char(month, 'Month YYYY') as bordereau_month, due_on, currency, unremitted_cents as amount_to_pay_cents from remittance_due where binder_id::text = split_part($1, '_', 1) and month = to_date(split_part($1, '_', 2), 'YYYYMMDD')"
+      },
+      {
+        "title": "Made up of",
+        "note": "Draft for the person who makes the payment. Nothing is paid from here.",
+        "sql": "select policy, insured, kind, effective_on, currency, gross_cents, tax_cents, agency_commission_cents, net_due_cents, collected_on from bordereau_lines where binder_id::text = split_part($1, '_', 1) and month = to_date(split_part($1, '_', 2), 'YYYYMMDD') and remitted_on is null order by policy"
+      }
+    ]
+  },
+  {
+    "name": "expiry-notice",
+    "title": "Notice of expiry (Insurance Contracts Act 1984, s58)",
+    "for_each": "select p.id, p.number || ' ' || i.name as name from policies p join binders bd on bd.id = p.binder_id join products pr on pr.id = p.product_id join insureds i on i.id = p.insured_id where bd.country = 'AU' and pr.renewable and p.status = 'in-force' and p.expiry_notice_on is null and p.expiry between current_date and current_date + 45 and not exists (select 1 from policies n where n.renewal_of = p.id) order by p.expiry",
+    "file": "name",
+    "sections": [
+      {
+        "title": "Your policy is due to expire",
+        "note": "Draft for review. Send it so it arrives at least 14 days before expiry: a posted notice is treated as received some days after posting, so allow for that. Record it with: notice <policy>.",
+        "sql": "select i.name as insured, p.number as policy, pr.name as cover, p.expiry as expires_on, coalesce((select value from settings where key = 'expiry_time'), 'the time on your schedule') as expires_at, case when p.not_renewing then 'We will not be offering to renew this policy.' else 'We are willing to negotiate a renewal. Your broker will send terms.' end as renewal, coalesce(b.name || ', ' || b.firm, 'Contact us') as your_broker from policies p join insureds i on i.id = p.insured_id join products pr on pr.id = p.product_id left join brokers b on b.id = p.broker_id where p.id = $1"
+      }
+    ]
+  },
+  {
+    "name": "claims-bordereau",
+    "title": "Claims bordereau",
+    "for_each": "select bd.id, bd.reference as name from binders bd where bd.status = 'active' order by bd.reference",
+    "file": "name",
+    "sections": [
+      {
+        "title": "Open and recently decided claims",
+        "sql": "select c.number, p.number as policy, i.name as insured, pr.class, c.loss_date, c.notified_on, c.status, c.decision, bd.currency, c.reserve_cents, c.paid_cents, (c.reserve_cents + c.paid_cents) as incurred_cents from claims c join policies p on p.id = c.policy_id join insureds i on i.id = p.insured_id join products pr on pr.id = p.product_id join binders bd on bd.id = p.binder_id where p.binder_id = $1 and (c.status <> 'closed' or c.closed_on > current_date - 90) order by c.notified_on"
+      },
+      {
+        "title": "Loss ratio to date",
+        "sql": "select l.binder, l.currency, l.written_cents, l.incurred_cents, l.claims, l.loss_ratio_percent from loss_ratio l join binders bd on bd.reference = l.binder where bd.id = $1"
+      }
+    ]
+  },
+  {
+    "name": "policy-schedule",
+    "title": "Policy schedule",
+    "for_each": "select p.id, p.number || ' ' || i.name as name from policies p join insureds i on i.id = p.insured_id where p.status = 'in-force' order by p.number",
+    "file": "name",
+    "sections": [
+      {
+        "title": "The insured and the cover",
+        "sql": "select insured, number as policy, product as cover, class, inception as period_from, expiry as period_to, currency, sum_insured_cents as limit_cents, annual_premium_cents, broker from policy_list where id = $1"
+      },
+      {
+        "title": "Insurer",
+        "note": "Issued by the agency under the insurer's binder.",
+        "sql": "select ins.name as insurer, bd.reference as binder from policies p join binders bd on bd.id = p.binder_id join insurers ins on ins.id = bd.insurer_id where p.id = $1"
+      },
+      {
+        "title": "Premium",
+        "sql": "select kind, effective_on, currency, gross_cents, tax_cents, (gross_cents + tax_cents) as total_cents from bordereau_lines where id in (select id from premium_transactions where policy_id = $1) order by effective_on"
+      }
+    ]
+  },
+  {
+    "name": "broker-statement",
+    "title": "Broker statement",
+    "for_each": "select b.id, b.name || ' ' || coalesce(b.firm, '') as name from brokers b where exists (select 1 from policies p where p.broker_id = b.id) order by b.name",
+    "file": "name",
+    "sections": [
+      {
+        "title": "Premium not yet received from you",
+        "note": "Gross premium plus tax, less your commission.",
+        "sql": "select l.policy, l.insured, l.kind, l.effective_on, l.currency, l.gross_cents, l.tax_cents, l.broker_commission_cents, (l.gross_cents + l.tax_cents - l.broker_commission_cents) as owed_cents from bordereau_lines l join premium_transactions t on t.id = l.id join policies p on p.id = t.policy_id where p.broker_id = $1 and l.collected_on is null order by l.effective_on"
+      },
+      {
+        "title": "Your production, last 12 months",
+        "sql": "select policies_in_force, gwp_12m_cents, quotes_12m, bound_12m, hit_rate_percent from broker_production where id = $1"
+      },
+      {
+        "title": "Renewals coming up",
+        "sql": "select number, insured, product, expiry, days_left, annual_premium_cents, currency, renewal_quote from renewals_due r where r.broker = (select name from brokers where id = $1) order by expiry"
+      }
     ]
   }
 ]
